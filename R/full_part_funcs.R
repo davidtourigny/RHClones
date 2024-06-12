@@ -134,12 +134,24 @@ clonal_mark_regression = function(count_mono, count_part, crypts_counted, Age, n
 
   part_fit = rstan::sampling(stanmodels$partials_normal, data = stan_data_part, iter = 1e4, chains = num_chains, verbose = F,  thin = 5,
                       init = rep(list(starting_vals_part),num_chains), control = list(adapt_delta = 0.9999, stepsize = 0.0001), cores = num_cores_use)
-
+                      
+  # Pop parameters
   pars_mono = c("x_intercept", "pop_mu", "pop_sd")
   pars_part = c("pop_mu", "pop_sd")
 
   tbl_reg  = dplyr::bind_cols(rstan::extract(mono_fit, pars_mono), rstan::extract(part_fit, pars_part))
   colnames(tbl_reg) = c("x_intercept", "mean_slope", "sd_slope", "partials_mean", "partials_sd")
-  tbl_reg
+  
+  # Per pat parameter
+  tbl_reg_indv = dplyr::as_tibble(rstan::extract(mono_fit, "a_i")[[1]])
+  per_pat_slope = tbl_reg_indv %>%
+    tidyr::gather(pat, val) %>%
+    dplyr::group_by(pat) %>%
+    dplyr::summarise(rho_mid = stats::quantile(val, 0.5),
+                     rho_min = stats::quantile(val, 0.975),
+                     rho_max = stats::quantile(val, 0.025))
+  pat_data = pat_data %>% dplyr::mutate(pat = paste0("V", 1:dplyr::n())) %>% dplyr::left_join(per_pat_slope)
+  
+  list(pop = tbl_reg, indv = pat_data)
 }
 
